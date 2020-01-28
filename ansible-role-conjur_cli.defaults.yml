@@ -1,0 +1,7 @@
+---
+conjur_cli_image_file: "cli5.tar.gz"
+conjur_cli_image_name: "conjurinc/cli5"
+conjur_cli_account_name: ""
+conjur_cli_container_name: "conjur-cli"
+conjur_cli_temp_dir: "/var/tmp/"
+conjur_cli_policies_dir: "/root/policies"

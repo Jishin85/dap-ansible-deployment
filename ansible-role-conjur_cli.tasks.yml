@@ -1,0 +1,30 @@
+---
+- name: check if conjur cli is already running
+  raw: docker ps | grep "{{ conjur_cli_container_name }}$"
+  register: docker_cmd
+  failed_when: docker_cmd.rc != 0 and docker_cmd.rc != 1
+
+- name: download conjur cli image
+  when: docker_cmd.rc == 1
+  get_url:
+    url: "{{ conjur_cli_image_file }}"
+    dest: "{{ conjur_cli_temp_dir }}"
+
+- name: load conjur cli image
+  when: docker_cmd.rc == 1
+  command: "docker load -i {{ conjur_cli_temp_dir }}/{{ conjur_cli_image_file }}"
+
+- name: create policy folder
+  when: docker_cmd.rc == 1
+  file:
+    path: "{{ conjur_cli_policies_dir }}"
+    state: directory
+
+- name: start conjur cli container
+  when: docker_cmd.rc == 1
+  command: "docker run --name {{ conjur_cli_container_name }} -d -v {{ conjur_cli_policies_dir }}:/policies --entrypoint sleep {{ conjur_cli_image_name }} infinity"
+
+- name: initialize conjur cli
+  when: docker_cmd.rc == 1
+  command: "docker exec -it {{ conjur_cli_container_name }} bash -c 'echo yes | conjur init -a {{ conjur_cli_account_name }} -u https://{{ conjur_cli_conjur_host_name }} --force=/root/conjur-{{ conjur_cli_account_name }}.pem'"
+  

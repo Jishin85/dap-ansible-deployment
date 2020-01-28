@@ -1,0 +1,78 @@
+---
+- name: check if conjur is already running
+  raw: docker ps | grep "{{ conjur_container_name }}$"
+  register: docker_cmd
+  failed_when: docker_cmd.rc != 0 and docker_cmd.rc != 1
+
+- name: load conjur image
+  when: docker_cmd.rc == 1
+  command: "docker load -i {{ conjur_temp_dir }}/{{ conjur_image_file }}"
+
+- name: create logs folder
+  when: docker_cmd.rc == 1
+  file:
+    path: "{{ conjur_logs_dir }}"
+    state: directory
+
+- name: create dap-secrets folder
+  # restrict permissions: group
+  when: docker_cmd.rc == 1
+  file:
+    path: "{{ conjur_secrets_dir }}"
+    state: directory
+
+- name: check if key file exists
+  when: docker_cmd.rc == 1
+  stat:
+    path: "{{ conjur_secrets_dir }}/{{ conjur_certkey_file }}"
+  register: keyfile
+
+- name: generate certificates
+  when: ((docker_cmd.rc == 1) and (keyfile.stat.exists == False))
+  debug:
+    msg: "TODO: Create Certificates"
+
+- name: start conjur container
+  when: docker_cmd.rc == 1
+  command: "docker run --name {{ conjur_container_name }} -v {{ conjur_logs_dir }}:/var/log/conjur -v {{ conjur_secrets_dir }}:/etc/dap-secrets -d --restart=always --security-opt seccomp:unconfined  -p \"{{ conjur_port_https }}:443\" -p \"{{ conjur_port_ldaps }}:636\" -p \"{{ conjur_port_psql }}:5432\" -p \"{{ conjur_port_audit }}:1999\" {{ conjur_image_name }}"
+
+- name: configure conjur as standalone
+  when: ((docker_cmd.rc == 1) and ((conjur_node_type == "standalone") or (conjur_node_type == "primary")))
+  command: "docker exec {{ conjur_container_name }} evoke configure master -h {{ hostid }} -p {{ conjur_admin_password }} {{ conjur_account_name }}"
+  #docker exec -i conjur evoke unpack seed /etc/dap-secrets/standby-seed.tar
+  #command: "docker exec {{ conjur_container_name }} evoke configure standby --master-address {{ conjur_master_dns }}"
+  #then at the master docker exec conjur evoke replication sync
+  #curl -k https://localhost/health
+
+#- name: configure conjur as primary master
+#  when: ((docker_cmd.rc == 1) and (conjur_node_type == "primary"))
+#  command: "docker exec {{ conjur_container_name }} evoke configure master -h {{ hostid }} --master-altnames .\"\" -p {{ conjur_admin_password }} {{ conjur_account_name }}"
+
+- name: import root ca certificate
+  when: ((docker_cmd.rc == 1) and ((conjur_node_type == "standalone") or (conjur_node_type == "primary")))
+  command: "docker exec {{ conjur_container_name }} evoke ca import --force --root {{ conjur_rootcert_file }}"
+
+- name: import ssl cert and private key
+  when: ((docker_cmd.rc == 1) and ((conjur_node_type == "standalone") or (conjur_node_type == "primary")))
+  command: "docker exec {{ conjur_container_name }} evoke ca import --key {{ conjur_certkey_file }} --set {{ conjur_cert_file }}"
+
+- name: generate master key
+  when: ((docker_cmd.rc == 1) and ((conjur_node_type == "standalone") or (conjur_node_type == "primary")))
+  #when: ((docker_cmd.rc == 1) and (conjur_node_type == "primary"))
+  command: "openssl rand 32 > {{ conjur_secrets_dir }}/master-key"
+
+- name: generate the standby seed
+  when: ((docker_cmd.rc == 1) and ((conjur_node_type == "standalone") or (conjur_node_type == "primary")))
+  #when: ((docker_cmd.rc == 1) and (conjur_node_type == "primary"))
+  command: "docker exec {{ conjur_container_name }} evoke seed standby > {{ conjur_secrets_dir }}/standby-seed.tar"
+  #command: "docker exec {{ conjur_container_name }} evoke seed follower conjurfollowerloadbalancerdnsname {{ hostid }}  > {{ conjur_secrets_dir }}/follower1-seed.tar
+
+- name: encrypt keys using master-key
+  when: ((docker_cmd.rc == 1) and (conjur_node_type == "primary"))
+  command: "docker exec {{ conjur_container_name }} evoke keys encrypt /etc/dap-secrets/master-key"
+
+#- name: Ansible Template Example
+#  when: ((docker_cmd.rc == 1) and ((conjur_node_type == "standalone") or (conjur_node_type == "primary"))
+#  template:
+#    src: root.j2
+#    dest: /Users/mdtutorials2/Documents/Ansible/hello_world.txt

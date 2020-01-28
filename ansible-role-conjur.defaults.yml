@@ -1,0 +1,15 @@
+---
+conjur_image_file: "conjur-appliance-5.6.0.tar.gz"
+conjur_image_name: "registry2.itci.conjur.net/conjur-appliance:5.6.0"
+conjur_account_name: ""
+conjur_container_name: "conjur"
+conjur_temp_dir: "/var/tmp/"
+conjur_logs_dir: "/var/log/conjur"
+conjur_secrets_dir: "/etc/dap-secrets"
+conjur_rootcert_file: ""
+conjur_cert_file: ""
+conjur_certkey_file: ""
+conjur_port_https: 443
+conjur_port_ldaps: 636
+conjur_port_psql: 5432
+conjur_port_audit: 1999
